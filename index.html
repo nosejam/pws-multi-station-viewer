@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>WU PWS Multi-Station Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <style>
+    :root {
+      --bg: #0f172a;
+      --bg-alt: #020617;
+      --card: #020617;
+      --accent: #38bdf8;
+      --accent-soft: rgba(56, 189, 248, 0.15);
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --border: #1e293b;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+      background: radial-gradient(circle at top, #1f2933, #020617);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.2rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    .app-shell {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      width: 100%;
+      max-width: 100%;
+    }
+
+    .top-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1rem;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .top-bar-left,
+    .top-bar-right {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 0.75rem;
+      align-items: center;
+    }
+
+    label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+    }
+
+    input[type="text"],
+    select,
+    input[type="datetime-local"] {
+      background: rgba(15, 23, 42, 0.9);
+      border-radius: 0.5rem;
+      border: 1px solid var(--border);
+      padding: 0.3rem 0.5rem;
+      color: var(--text);
+      font-size: 0.8rem;
+      min-width: 9rem;
+    }
+
+    input[type="text"]:focus,
+    select:focus,
+    input[type="datetime-local"]:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-soft);
+    }
+
+    button {
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: radial-gradient(circle at top left, #0f172a, #020617);
+      color: var(--text);
+      padding: 0.4rem 0.9rem;
+      font-size: 0.8rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: background 0.15s ease, transform 0.1s ease,
+        box-shadow 0.15s ease, border-color 0.15s ease;
+      box-shadow: 0 8px 16px rgba(15, 23, 42, 0.65);
+    }
+
+    button:hover {
+      background: radial-gradient(circle at top left, #1e293b, #020617);
+      transform: translateY(-1px);
+      border-color: var(--accent);
+      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.8);
+    }
+
+    button.primary {
+      border-color: var(--accent);
+      background: linear-gradient(135deg, #0ea5e9, #22c55e);
+    }
+
+    button.primary:hover {
+      background: linear-gradient(135deg, #38bdf8, #4ade80);
+    }
+
+    .pill {
+      font-size: 0.7rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      padding: 0.15rem 0.45rem;
+      color: var(--muted);
+      background: rgba(15, 23, 42, 0.8);
+    }
+
+    #custom-range {
+      display: none;
+      gap: 0.3rem;
+      align-items: flex-end;
+      margin-bottom: 0.25rem;
+    }
+
+    #custom-range label {
+      min-width: 10rem;
+    }
+
+    /* MAIN LAYOUT: top 50% (map + list), bottom 50% (chart) */
+
+    .main-grid {
+      flex: 1;
+      display: grid;
+      grid-template-rows: 1fr 1fr; /* 50% / 50% vertically */
+      gap: 0.5rem;
+      min-height: 0;
+    }
+
+    .top-grid {
+      display: grid;
+      grid-template-columns: 3fr 1fr; /* 75% / 25% horizontally */
+      gap: 0.5rem;
+      min-height: 0;
+    }
+
+    #map-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      background: #020617;
+      border-radius: 0.9rem;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.9);
+      min-height: 0;
+    }
+
+    #map {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+    }
+
+    #map-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      align-items: center;
+      font-size: 0.75rem;
+      padding: 0.3rem 0.4rem;
+      background: rgba(15, 23, 42, 0.95);
+      border-top: 1px solid var(--border);
+    }
+
+    #map-controls button {
+      box-shadow: none;
+    }
+
+    #status {
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-left: auto;
+      min-height: 1em;
+    }
+
+    #station-panel {
+      background: radial-gradient(circle at top left, #020617, #020617);
+      border-radius: 0.9rem;
+      border: 1px solid var(--border);
+      padding: 0.6rem 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.9);
+      min-height: 0;
+    }
+
+    #station-panel h2 {
+      margin: 0;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+
+    #station-list {
+      flex: 1;
+      overflow-y: auto;
+      border-radius: 0.6rem;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(15, 23, 42, 0.9);
+      padding: 0.35rem;
+      font-size: 0.78rem;
+      min-height: 0;
+    }
+
+    .station-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.4rem;
+      padding: 0.35rem 0.45rem;
+      border-radius: 0.5rem;
+      transition: background 0.15s ease, border-color 0.15s ease;
+      border: 1px solid transparent;
+    }
+
+    .station-item.selected {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+    }
+
+    .station-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 0.1rem;
+    }
+
+    .station-name {
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .station-id {
+      color: var(--muted);
+      font-size: 0.7rem;
+    }
+
+    .station-item button {
+      font-size: 0.7rem;
+      padding: 0.25rem 0.7rem;
+      box-shadow: none;
+      border-radius: 999px;
+    }
+
+    .station-item button.remove {
+      border-color: rgba(248, 113, 113, 0.6);
+      color: #fecaca;
+    }
+
+    .station-item button.remove:hover {
+      background: rgba(248, 113, 113, 0.12);
+    }
+
+    /* Chart section (bottom 50%) */
+
+    #chart-container {
+      position: relative;
+      background: radial-gradient(circle at top left, #020617, #020617);
+      border-radius: 0.9rem;
+      border: 1px solid var(--border);
+      padding: 0.4rem;
+      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.9);
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #chart {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+    }
+
+.chart-fs-btn {
+  position: absolute;
+  bottom: 0.6rem;
+  right: 0.6rem;
+  z-index: 10;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.75rem;
+  box-shadow: none;
+  backdrop-filter: blur(6px);
+}
+
+
+    /* Fullscreen handling */
+
+.fullscreen-section {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  background: radial-gradient(circle at top, #0b1120, #020617);
+  margin: 0 !important;
+  border-radius: 0;
+  padding: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.fullscreen-section #map,
+.fullscreen-section #chart {
+  width: 100%;
+  height: 100%;
+}
+
+/* When the CHART is fullscreen, hide the rest of the UI */
+body.chart-fullscreen .top-bar,
+body.chart-fullscreen #custom-range,
+body.chart-fullscreen .top-grid {
+  display: none;
+}
+
+body.chart-fullscreen .main-grid {
+  grid-template-rows: 1fr; /* only chart row remains */
+}
+
+
+
+    .fullscreen-section #map-controls {
+      margin-top: 0.3rem;
+    }
+
+    @media (max-width: 900px) {
+      .top-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: 2fr 1fr;
+      }
+      #station-panel {
+        min-height: 150px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .top-bar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .top-bar-left,
+      .top-bar-right {
+        width: 100%;
+      }
+    }
+
+    /* Leaflet dark tweaks */
+    .leaflet-control-container .leaflet-control-attribution {
+      background: rgba(15, 23, 42, 0.8);
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="top-bar">
+      <div class="top-bar-left">
+        <h1>Personal Weather Station Explorer</h1>
+        <span class="pill">WU / Weather.com PWS API</span>
+      </div>
+      <div class="top-bar-right">
+        <label>
+          API key
+          <input id="apiKeyInput" type="text" placeholder="Your WU PWS API key" />
+        </label>
+        <label>
+          Units
+          <select id="unitsSelect">
+            <option value="e">English (°F, mph)</option>
+            <option value="m">Metric (°C, km/h)</option>
+            <option value="h">UK Hybrid</option>
+          </select>
+        </label>
+        <label>
+          Measurement
+          <select id="measurementSelect">
+            <option value="temp">Temperature</option>
+            <option value="dewpt">Dew point</option>
+            <option value="humidity">Humidity</option>
+            <option value="pressure">Pressure</option>
+            <option value="windSpeed">Wind speed</option>
+            <option value="windGust">Wind gust</option>
+            <option value="precipRate">Precip rate</option>
+            <option value="precipTotal">Precip total</option>
+          </select>
+        </label>
+        <label>
+          Time range
+          <select id="rangeSelect">
+            <option value="1d">Past 24 hours</option>
+            <option value="7d">Past week</option>
+            <option value="30d">Past month</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+        <button class="primary" id="updateChartBtn">
+          ⚡ Update chart
+        </button>
+      </div>
+    </div>
+
+    <div id="custom-range">
+      <label>
+        Start
+        <input id="customStart" type="datetime-local" />
+      </label>
+      <label>
+        End
+        <input id="customEnd" type="datetime-local" />
+      </label>
+      <button id="applyCustomBtn">Apply custom range</button>
+    </div>
+
+    <div class="main-grid">
+      <!-- TOP 50%: map (75%) + station list (25%) -->
+      <div class="top-grid">
+        <section id="map-section">
+          <div id="map"></div>
+          <div id="map-controls">
+            <button id="locateBtn">📍 Use my location</button>
+            <button id="findStationsBtn">
+              🔎 Find PWS near map center
+            </button>
+            <button id="mapFullscreenBtn">⛶ Fullscreen map</button>
+            <span id="status"></span>
+          </div>
+        </section>
+
+        <aside id="station-panel">
+          <h2>
+            Selected stations
+            <span id="selectedCount" class="pill">0 selected</span>
+          </h2>
+          <div id="station-list">
+            <div style="font-size: 0.8rem; color: var(--muted);">
+              • Pan/zoom the map to an area of interest.<br />
+              • Click <strong>“Find PWS near map center”</strong>.<br />
+              • Click a marker to toggle it in the list.<br />
+              • Pick a measurement and time range, then hit
+              <strong>“Update chart”</strong>.
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <!-- BOTTOM 50%: chart -->
+      <div id="chart-container">
+        <button id="chartFullscreenBtn" class="chart-fs-btn">
+          ⛶ Fullscreen chart
+        </button>
+        <div id="chart"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <!-- Plotly JS -->
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script>
+    // ================== CONFIG ==================
+
+    const API_KEY_DEFAULT = ""; // optional default key
+    const API_BASE = "https://api.weather.com";
+
+    const UNIT_FIELD = {
+      e: "imperial",
+      m: "metric",
+      h: "uk_hybrid",
+      s: "metric_si",
+    };
+
+    // Helper: first non-null / non-undefined
+    function coalesce(...vals) {
+      for (const v of vals) {
+        if (v !== null && v !== undefined) return v;
+      }
+      return null;
+    }
+
+    // Measurement definitions (using tempAvg, dewptAvg, etc.)
+    const MEASUREMENTS = {
+      temp: {
+        label: "Temperature",
+        getValue: (obs, unitsField) => {
+          const u = obs[unitsField] || {};
+          return coalesce(u.tempAvg, u.tempHigh, u.tempLow);
+        },
+      },
+      dewpt: {
+        label: "Dew point",
+        getValue: (obs, unitsField) => {
+          const u = obs[unitsField] || {};
+          return coalesce(u.dewptAvg, u.dewptHigh, u.dewptLow);
+        },
+      },
+      humidity: {
+        label: "Humidity",
+        getValue: (obs) => {
+          return coalesce(obs.humidityAvg, obs.humidityHigh, obs.humidityLow);
+        },
+      },
+      pressure: {
+        label: "Pressure",
+        getValue: (obs, unitsField) => {
+          const u = obs[unitsField] || {};
+          return coalesce(u.pressureAvg, u.pressureMax, u.pressureMin);
+        },
+      },
+      windSpeed: {
+        label: "Wind speed",
+        getValue: (obs, unitsField) => {
+          const u = obs[unitsField] || {};
+          return coalesce(u.windspeedAvg, u.windspeedHigh, u.windspeedLow);
+        },
+      },
+      windGust: {
+        label: "Wind gust",
+        getValue: (obs, unitsField) => {
+          const u = obs[unitsField] || {};
+          return coalesce(u.windgustAvg, u.windgustHigh, u.windgustLow);
+        },
+      },
+      precipRate: {
+        label: "Precip rate",
+        getValue: (obs, unitsField) => {
+          const u = obs[unitsField] || {};
+          return coalesce(u.precipRate);
+        },
+      },
+      precipTotal: {
+        label: "Precip total",
+        getValue: (obs, unitsField) => {
+          const u = obs[unitsField] || {};
+          return coalesce(u.precipTotal);
+        },
+      },
+    };
+
+    // ================== STATE ==================
+    let map;
+    const stationMarkers = new Map(); // stationId -> Leaflet marker
+    const selectedStations = new Map(); // stationId -> {id,name,lat,lon}
+    const dataCache = new Map(); // cacheKey -> observations[]
+    let fullscreenMode = null; // 'map' | 'chart' | null
+
+    // DOM hooks
+    const apiKeyInput = document.getElementById("apiKeyInput");
+    const unitsSelect = document.getElementById("unitsSelect");
+    const measurementSelect = document.getElementById("measurementSelect");
+    const rangeSelect = document.getElementById("rangeSelect");
+    const updateChartBtn = document.getElementById("updateChartBtn");
+    const locateBtn = document.getElementById("locateBtn");
+    const findStationsBtn = document.getElementById("findStationsBtn");
+    const stationListDiv = document.getElementById("station-list");
+    const selectedCountSpan = document.getElementById("selectedCount");
+    const statusSpan = document.getElementById("status");
+    const customRangeContainer = document.getElementById("custom-range");
+    const customStartInput = document.getElementById("customStart");
+    const customEndInput = document.getElementById("customEnd");
+    const applyCustomBtn = document.getElementById("applyCustomBtn");
+    const mapSection = document.getElementById("map-section");
+    const chartContainer = document.getElementById("chart-container");
+    const mapFullscreenBtn = document.getElementById("mapFullscreenBtn");
+    const chartFullscreenBtn = document.getElementById("chartFullscreenBtn");
+
+function loadStoredApiKey() {
+  try {
+    const stored = localStorage.getItem("wuPwsApiKey");
+    if (stored) {
+      apiKeyInput.value = stored;
+    }
+  } catch (e) {
+    console.warn("Could not read API key from localStorage:", e);
+  }
+}
+
+function saveApiKey() {
+  const val = apiKeyInput.value.trim();
+  if (!val) return;
+  try {
+    localStorage.setItem("wuPwsApiKey", val);
+  } catch (e) {
+    console.warn("Could not save API key to localStorage:", e);
+  }
+}
+
+
+    // ================== INIT ==================
+
+function init() {
+  if (API_KEY_DEFAULT) {
+    apiKeyInput.value = API_KEY_DEFAULT;
+  }
+
+  loadStoredApiKey();
+
+  // Save on change / blur so you can paste it once and it sticks
+  apiKeyInput.addEventListener("change", saveApiKey);
+  apiKeyInput.addEventListener("blur", saveApiKey);
+
+  initMap();
+  initChartEmpty();
+  wireEvents();
+}
+
+
+    function initMap() {
+      map = L.map("map").setView([38, -97], 4);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap contributors",
+      }).addTo(map);
+    }
+
+    function initChartEmpty() {
+      Plotly.newPlot(
+        "chart",
+        [],
+        {
+          title: {
+            text: "Select stations and click “Update chart”",
+            font: { size: 14, color: "#e5e7eb" },
+          },
+          paper_bgcolor: "rgba(15,23,42,0)",
+          plot_bgcolor: "rgba(15,23,42,0.9)",
+          margin: { l: 50, r: 20, t: 40, b: 40 },
+          xaxis: {
+            title: { text: "Time", font: { color: "#9ca3af" } },
+            showgrid: true,
+            gridcolor: "rgba(148,163,184,0.2)",
+            tickfont: { color: "#9ca3af" },
+          },
+          yaxis: {
+            title: { text: "", font: { color: "#9ca3af" } },
+            showgrid: true,
+            gridcolor: "rgba(148,163,184,0.2)",
+            tickfont: { color: "#9ca3af" },
+          },
+          legend: {
+            bgcolor: "rgba(15,23,42,0.8)",
+            bordercolor: "rgba(148,163,184,0.4)",
+          },
+        },
+        { responsive: true }
+      );
+    }
+
+    // ================== EVENTS ==================
+
+    function wireEvents() {
+      locateBtn.addEventListener("click", () => {
+        if (!navigator.geolocation) {
+          setStatus("Geolocation is not supported by this browser.");
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const lat = pos.coords.latitude;
+            const lon = pos.coords.longitude;
+            map.setView([lat, lon], 11);
+            setStatus("Centered map on your location.");
+          },
+          (err) => {
+            setStatus("Could not get your location.");
+            console.error(err);
+          }
+        );
+      });
+
+      findStationsBtn.addEventListener("click", () => {
+        findStationsNearMapCenter().catch((err) => {
+          console.error(err);
+          setStatus("Error finding stations (see console).");
+        });
+      });
+
+      updateChartBtn.addEventListener("click", () => {
+        refreshChart().catch((err) => {
+          console.error(err);
+          setStatus("Error updating chart (see console).");
+        });
+      });
+
+      rangeSelect.addEventListener("change", () => {
+        const val = rangeSelect.value;
+        if (val === "custom") {
+          customRangeContainer.style.display = "flex";
+        } else {
+          customRangeContainer.style.display = "none";
+        }
+      });
+
+      applyCustomBtn.addEventListener("click", () => {
+        refreshChart().catch((err) => {
+          console.error(err);
+          setStatus("Error updating chart (see console).");
+        });
+      });
+
+      mapFullscreenBtn.addEventListener("click", () => {
+        toggleFullscreen("map");
+      });
+
+      chartFullscreenBtn.addEventListener("click", () => {
+        toggleFullscreen("chart");
+      });
+
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && fullscreenMode) {
+          exitFullscreen();
+        }
+      });
+
+      window.addEventListener("resize", () => {
+        if (map) map.invalidateSize();
+        if (document.getElementById("chart")) {
+          Plotly.Plots.resize("chart");
+        }
+      });
+    }
+
+    // ================== FULLSCREEN HELPERS ==================
+
+    function toggleFullscreen(which) {
+      if (fullscreenMode === which) {
+        exitFullscreen();
+      } else {
+        enterFullscreen(which);
+      }
+    }
+
+function enterFullscreen(which) {
+  if (fullscreenMode && fullscreenMode !== which) {
+    exitFullscreen();
+  }
+  fullscreenMode = which;
+
+  const section = which === "map" ? mapSection : chartContainer;
+  section.classList.add("fullscreen-section");
+
+  // For chart fullscreen, hide everything else via body class
+  if (which === "chart") {
+    document.body.classList.add("chart-fullscreen");
+    chartFullscreenBtn.textContent = "⤢ Exit fullscreen";
+  } else {
+    mapFullscreenBtn.textContent = "⤢ Exit fullscreen";
+  }
+
+  setTimeout(() => {
+    if (which === "map") {
+      map.invalidateSize();
+    } else {
+      Plotly.Plots.resize("chart");
+    }
+  }, 50);
+}
+
+function exitFullscreen() {
+  if (!fullscreenMode) return;
+
+  const section = fullscreenMode === "map" ? mapSection : chartContainer;
+  section.classList.remove("fullscreen-section");
+
+  if (fullscreenMode === "chart") {
+    document.body.classList.remove("chart-fullscreen");
+  }
+
+  fullscreenMode = null;
+  mapFullscreenBtn.textContent = "⛶ Fullscreen map";
+  chartFullscreenBtn.textContent = "⛶ Fullscreen chart";
+
+  setTimeout(() => {
+    map.invalidateSize();
+    Plotly.Plots.resize("chart");
+  }, 100);
+}
+
+    // ================== STATION DISCOVERY ==================
+
+    function getApiKeyOrWarn() {
+      const key = apiKeyInput.value.trim();
+      if (!key) {
+        alert("Please enter your Weather Underground / Weather.com API key.");
+        throw new Error("Missing API key");
+      }
+      return key;
+    }
+
+    function setStatus(msg) {
+      statusSpan.textContent = msg || "";
+    }
+
+    async function findStationsNearMapCenter() {
+      const apiKey = getApiKeyOrWarn();
+      const center = map.getCenter();
+      const url =
+        API_BASE +
+        "/v3/location/near?geocode=" +
+        encodeURIComponent(center.lat + "," + center.lng) +
+        "&product=pws&format=json&apiKey=" +
+        encodeURIComponent(apiKey);
+
+      setStatus("Searching for PWS near map center…");
+      const res = await fetch(url);
+      if (!res.ok) {
+        setStatus("API error when searching for stations.");
+        throw new Error("HTTP " + res.status);
+      }
+      const data = await res.json();
+
+      if (!data.location || !data.location.stationId) {
+        setStatus("No PWS found near this location.");
+        return;
+      }
+
+      const ids = data.location.stationId;
+      const names = data.location.stationName || [];
+      const lats = data.location.latitude || [];
+      const lons = data.location.longitude || [];
+
+      ids.forEach((id, idx) => {
+        const lat = lats[idx];
+        const lon = lons[idx];
+        const name = names[idx] || id;
+
+        if (!stationMarkers.has(id)) {
+          const marker = L.marker([lat, lon]).addTo(map);
+          marker.bindPopup(
+            `<strong>${name}</strong><br/>${id}<br/><small>Click marker to add/remove from chart</small>`
+          );
+          marker.on("click", () => {
+            toggleStationSelection({
+              id,
+              name,
+              lat,
+              lon,
+            });
+          });
+          stationMarkers.set(id, marker);
+        }
+      });
+
+      setStatus(`Found ${ids.length} PWS near map center.`);
+    }
+
+    function toggleStationSelection(info) {
+      const { id } = info;
+
+      if (selectedStations.has(id)) {
+        selectedStations.delete(id);
+      } else {
+        selectedStations.set(id, info);
+      }
+      updateStationListUI();
+    }
+
+    function updateStationListUI() {
+      const entries = Array.from(selectedStations.values());
+      selectedCountSpan.textContent = `${entries.length} selected`;
+
+      if (entries.length === 0) {
+        stationListDiv.innerHTML =
+          '<div style="font-size:0.8rem;color:var(--muted);">No stations selected yet.</div>';
+        return;
+      }
+
+      stationListDiv.innerHTML = "";
+      entries.forEach((st) => {
+        const item = document.createElement("div");
+        item.className = "station-item selected";
+
+        const meta = document.createElement("div");
+        meta.className = "station-meta";
+
+        const nameEl = document.createElement("div");
+        nameEl.className = "station-name";
+        nameEl.textContent = st.name || st.id;
+
+        const idEl = document.createElement("div");
+        idEl.className = "station-id";
+        idEl.textContent = `${st.id} · ${st.lat.toFixed(
+          3
+        )}, ${st.lon.toFixed(3)}`;
+
+        meta.appendChild(nameEl);
+        meta.appendChild(idEl);
+
+        const btn = document.createElement("button");
+        btn.textContent = "Remove";
+        btn.className = "remove";
+        btn.addEventListener("click", () => {
+          selectedStations.delete(st.id);
+          updateStationListUI();
+        });
+
+        item.appendChild(meta);
+        item.appendChild(btn);
+
+        stationListDiv.appendChild(item);
+      });
+    }
+
+    // ================== DATA FETCHING ==================
+
+    function computeRange() {
+      const key = rangeSelect.value;
+      const now = new Date();
+      let start, end;
+
+      if (key === "1d") {
+        end = now;
+        start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      } else if (key === "7d") {
+        end = now;
+        start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      } else if (key === "30d") {
+        end = now;
+        start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      } else if (key === "custom") {
+        const sVal = customStartInput.value;
+        const eVal = customEndInput.value;
+        if (!sVal || !eVal) {
+          alert("Please pick both start and end date/time for custom range.");
+          throw new Error("Missing custom range");
+        }
+        start = new Date(sVal);
+        end = new Date(eVal);
+        if (!(start instanceof Date) || isNaN(start) || !(end instanceof Date) || isNaN(end)) {
+          alert("Invalid custom date/time.");
+          throw new Error("Invalid custom range");
+        }
+        if (end <= start) {
+          alert("End must be after start.");
+          throw new Error("Invalid custom range order");
+        }
+        const maxDays = 31;
+        const spanMs = end.getTime() - start.getTime();
+        if (spanMs > maxDays * 24 * 60 * 60 * 1000) {
+          alert(
+            "Custom range is too long. Please choose 31 days or less to avoid hitting API limits."
+          );
+          throw new Error("Range too long");
+        }
+      } else {
+        end = now;
+        start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      }
+
+      return { key, start, end };
+    }
+
+    function formatYmd(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}${m}${day}`;
+    }
+
+    function* eachDay(start, end) {
+      const cur = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+      const last = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+      while (cur <= last) {
+        yield new Date(cur);
+        cur.setDate(cur.getDate() + 1);
+      }
+    }
+
+async function fetchStationSeries(stationId, rangeInfo, unitsCode) {
+  const { key: rangeKey, start, end } = rangeInfo;
+  const apiKey = getApiKeyOrWarn();
+  const cacheKey =
+    stationId + "|" + rangeKey + "|" + formatYmd(start) + "-" + formatYmd(end);
+
+  if (dataCache.has(cacheKey)) {
+    return dataCache.get(cacheKey);
+  }
+
+  let observations = [];
+
+  if (rangeKey === "1d") {
+    // Simple: use 1-day endpoint
+    const url =
+      API_BASE +
+      "/v2/pws/observations/all/1day?stationId=" +
+      encodeURIComponent(stationId) +
+      "&format=json&numericPrecision=decimal&units=" +
+      encodeURIComponent(unitsCode) +
+      "&apiKey=" +
+      encodeURIComponent(apiKey);
+
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error("HTTP " + res.status + " for " + url);
+    }
+    const data = await res.json();
+    observations = data.observations || [];
+  } else {
+    // > 1 day: try history/all per day, but don't die if some days fail
+    const tasks = [];
+    for (const day of eachDay(start, end)) {
+      const ymd = formatYmd(day);
+      const url =
+        API_BASE +
+        "/v2/pws/history/all?stationId=" +
+        encodeURIComponent(stationId) +
+        "&format=json&numericPrecision=decimal&units=" +
+        encodeURIComponent(unitsCode) +
+        "&date=" +
+        encodeURIComponent(ymd) +
+        "&apiKey=" +
+        encodeURIComponent(apiKey);
+
+      tasks.push(
+        (async () => {
+          try {
+            const res = await fetch(url);
+            if (!res.ok) {
+              // No data / error for this day → just skip it
+              return [];
+            }
+            const data = await res.json();
+            return data.observations || [];
+          } catch (e) {
+            console.error("Error fetching history for", stationId, ymd, e);
+            return [];
+          }
+        })()
+      );
+    }
+
+    const results = await Promise.all(tasks);
+    observations = results.flat();
+
+    // If history/all gave us nothing, fall back to 1-day endpoint
+    if (!observations.length) {
+      try {
+        const url =
+          API_BASE +
+          "/v2/pws/observations/all/1day?stationId=" +
+          encodeURIComponent(stationId) +
+          "&format=json&numericPrecision=decimal&units=" +
+          encodeURIComponent(unitsCode) +
+          "&apiKey=" +
+          encodeURIComponent(apiKey);
+
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          observations = data.observations || [];
+        }
+      } catch (e) {
+        console.error("Fallback 1-day fetch failed for", stationId, e);
+      }
+    }
+  }
+
+  // Filter to requested interval (important for 1-day fallback)
+  const filtered = observations.filter((obs) => {
+    const tStr = obs.obsTimeUtc || obs.validTimeUtc || obs.obsTimeLocal;
+    if (!tStr) return false;
+    const t = new Date(tStr);
+    return t >= start && t <= end;
+  });
+
+  dataCache.set(cacheKey, filtered);
+  return filtered;
+}
+
+
+    function extractSeries(observations, measurementKey, unitsCode) {
+      const mDef = MEASUREMENTS[measurementKey];
+      if (!mDef) {
+        throw new Error("Unknown measurement: " + measurementKey);
+      }
+      const unitsField = UNIT_FIELD[unitsCode] || "imperial";
+
+      const x = [];
+      const y = [];
+      for (const obs of observations) {
+        const tStr = obs.obsTimeUtc || obs.validTimeUtc || obs.obsTimeLocal;
+        if (!tStr) continue;
+        const t = new Date(tStr);
+        if (!(t instanceof Date) || isNaN(t)) continue;
+        const v = mDef.getValue(obs, unitsField);
+        if (v == null) continue;
+        x.push(t);
+        y.push(v);
+      }
+      return { x, y };
+    }
+
+    async function refreshChart() {
+      const entries = Array.from(selectedStations.values());
+      if (entries.length === 0) {
+        alert("Select at least one station first.");
+        return;
+      }
+
+      const units = unitsSelect.value || "e";
+      const measurementKey = measurementSelect.value || "temp";
+      const rangeInfo = computeRange();
+      const mDef = MEASUREMENTS[measurementKey];
+      const yLabel = mDef ? mDef.label : measurementKey;
+
+      setStatus("Fetching data for " + entries.length + " station(s)…");
+
+      const traces = [];
+      for (const st of entries) {
+        try {
+          const observations = await fetchStationSeries(
+            st.id,
+            rangeInfo,
+            units
+          );
+          const { x, y } = extractSeries(observations, measurementKey, units);
+          traces.push({
+            x,
+            y,
+            mode: "lines",
+            name: `${st.name || st.id} (${st.id})`,
+            hovertemplate:
+              "%{x}<br>" + yLabel + ": %{y}<extra></extra>",
+          });
+        } catch (err) {
+          console.error("Error fetching for station", st.id, err);
+        }
+      }
+
+      if (traces.length === 0) {
+        setStatus("No data available for that combination (try a different range).");
+        initChartEmpty();
+        return;
+      }
+
+      const rangeLabel =
+        rangeInfo.key === "1d"
+          ? "Past 24 hours"
+          : rangeInfo.key === "7d"
+          ? "Past week"
+          : rangeInfo.key === "30d"
+          ? "Past month"
+          : "Custom";
+
+      const titleText = `${yLabel} · ${rangeLabel}`;
+
+      const layout = {
+        title: {
+          text: titleText,
+          font: { size: 14, color: "#e5e7eb" },
+        },
+        paper_bgcolor: "rgba(15,23,42,0)",
+        plot_bgcolor: "rgba(15,23,42,0.9)",
+        margin: { l: 50, r: 20, t: 40, b: 40 },
+        xaxis: {
+          title: { text: "Time", font: { color: "#9ca3af" } },
+          showgrid: true,
+          gridcolor: "rgba(148,163,184,0.2)",
+          tickfont: { color: "#9ca3af" },
+        },
+        yaxis: {
+          title: { text: yLabel, font: { color: "#9ca3af" } },
+          showgrid: true,
+          gridcolor: "rgba(148,163,184,0.2)",
+          tickfont: { color: "#9ca3af" },
+        },
+        legend: {
+          bgcolor: "rgba(15,23,42,0.8)",
+          bordercolor: "rgba(148,163,184,0.4)",
+        },
+      };
+
+      Plotly.newPlot("chart", traces, layout, { responsive: true });
+      setStatus("Chart updated.");
+    }
+
+    // ================== GO ==================
+    init();
+  </script>
+</body>
+</html>
