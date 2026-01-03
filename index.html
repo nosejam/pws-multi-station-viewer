@@ -184,6 +184,8 @@
       overflow: hidden;
       box-shadow: 0 16px 40px rgba(15, 23, 42, 0.9);
       min-height: 0;
+    
+      position: relative;
     }
 
     #map {
@@ -397,7 +399,109 @@ body.chart-fullscreen .main-grid {
       background: rgba(15, 23, 42, 0.8);
       color: var(--muted);
     }
-  </style>
+  
+    /* Station info panel (fixed, top-left of map) */
+    .station-info{
+      position:absolute;
+      top: 56px;
+      left:12px;
+      z-index: 600; /* above tiles, below Leaflet controls (usually 1000+) */
+      width: min(340px, calc(100% - 24px));
+      background: rgba(15,23,42,0.92);
+      border: 1px solid rgba(148,163,184,0.35);
+      border-radius: 14px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+      padding: 10px 12px;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      pointer-events: auto;
+    }
+    .station-info.hidden{ display:none; }
+    .station-info-header{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom: 6px;
+    }
+    .info-name{ font-weight: 700; font-size: 0.95rem; color: #e5e7eb; line-height:1.15; }
+    .info-id{ font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+    .info-star{
+      font-size: 1.15rem;
+      line-height:1;
+      padding: 2px 6px;
+      border-radius: 10px;
+      border: 1px solid rgba(148,163,184,0.35);
+      color: #e5e7eb;
+      user-select:none;
+    }
+    .info-meta{
+      font-size: 0.78rem;
+      color: #cbd5e1;
+      display:grid;
+      grid-template-columns: 1fr;
+      gap: 2px;
+      margin-bottom: 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .info-actions{
+      display:flex;
+      gap:8px;
+      flex-wrap: wrap;
+      align-items:center;
+    }
+    .small{ padding: 6px 10px !important; font-size: 0.8rem !important; }
+    .ghost{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding: 6px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(148,163,184,0.25);
+      color: #e5e7eb;
+      text-decoration:none;
+      background: rgba(15,23,42,0.35);
+    }
+    .ghost:hover{ background: rgba(148,163,184,0.12); }
+    .info-note{ margin-top: 6px; font-size: 0.72rem; color: var(--muted); }
+
+    /* Star tooltip above markers */
+    .star-tooltip{
+      background: rgba(15,23,42,0.85);
+      border: 1px solid rgba(148,163,184,0.35);
+      color: #e5e7eb;
+      border-radius: 10px;
+      padding: 2px 6px;
+      font-size: 0.85rem;
+    }
+
+
+    .temp-marker{
+      background: transparent;
+      border: none;
+    }
+    .temp-circle{
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      border: 2px solid rgba(226,232,240,0.85);
+      background: rgba(2,6,23,0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #e5e7eb;
+      box-shadow: 0 6px 18px rgba(15,23,42,0.6);
+      backdrop-filter: blur(2px);
+    }
+    .temp-circle.empty{
+      background: rgba(2,6,23,0.25);
+      color: rgba(226,232,240,0.65);
+    }
+</style>
 </head>
 <body>
   <div class="app-shell">
@@ -464,6 +568,22 @@ body.chart-fullscreen .main-grid {
       <div class="top-grid">
         <section id="map-section">
           <div id="map"></div>
+          <div id="station-info" class="station-info hidden" aria-live="polite">
+            <div class="station-info-header">
+              <div>
+                <div id="info-name" class="info-name">Click a station marker</div>
+                <div id="info-id" class="info-id"></div>
+              </div>
+              <div id="info-star" class="info-star" title="QC status (heuristic)">☆</div>
+            </div>
+            <div id="info-meta" class="info-meta"></div>
+            <div class="info-actions">
+              <button id="info-add" class="primary small">＋ Add</button>
+              <button id="info-remove" class="secondary small">－ Remove</button>
+              <a id="info-link" class="ghost small" href="#" target="_blank" rel="noopener">Open on WU</a>
+            </div>
+            <div id="info-note" class="info-note"></div>
+          </div>
           <div id="map-controls">
             <button id="locateBtn">📍 Use my location</button>
             <button id="findStationsBtn">
@@ -657,6 +777,47 @@ function init() {
 }
 
 
+function isMobileLayout() {
+  return window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
+}
+
+function legendLayoutForScreen() {
+  if (isMobileLayout()) {
+    // Horizontal legend below the plot
+    return {
+      orientation: "h",
+      x: 0,
+      xanchor: "left",
+      y: -0.25,
+      yanchor: "top",
+      bgcolor: "rgba(15,23,42,0.8)",
+      bordercolor: "rgba(148,163,184,0.4)",
+      borderwidth: 1,
+      // Helps keep legend from getting too tall
+      font: { size: 10 },
+      // Optional: makes it less intrusive
+      itemclick: "toggle",
+      itemdoubleclick: "toggleothers",
+    };
+  }
+
+  // Desktop: legend on the right (or default behavior)
+  return {
+    bgcolor: "rgba(15,23,42,0.8)",
+    bordercolor: "rgba(148,163,184,0.4)",
+    borderwidth: 1,
+  };
+}
+
+function marginsForScreen() {
+  if (isMobileLayout()) {
+    // Extra bottom margin for horizontal legend
+    return { l: 45, r: 10, t: 40, b: 85 };
+  }
+  return { l: 50, r: 20, t: 40, b: 40 };
+}
+
+
     function initMap() {
       map = L.map("map").setView([38, -97], 4);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -676,7 +837,7 @@ function init() {
           },
           paper_bgcolor: "rgba(15,23,42,0)",
           plot_bgcolor: "rgba(15,23,42,0.9)",
-          margin: { l: 50, r: 20, t: 40, b: 40 },
+          margin: marginsForScreen(),
           xaxis: {
             title: { text: "Time", font: { color: "#9ca3af" } },
             showgrid: true,
@@ -689,10 +850,7 @@ function init() {
             gridcolor: "rgba(148,163,184,0.2)",
             tickfont: { color: "#9ca3af" },
           },
-          legend: {
-            bgcolor: "rgba(15,23,42,0.8)",
-            bordercolor: "rgba(148,163,184,0.4)",
-          },
+          legend: legendLayoutForScreen(),
         },
         { responsive: true }
       );
@@ -758,18 +916,38 @@ function init() {
         toggleFullscreen("chart");
       });
 
-      document.addEventListener("keydown", (e) => {
+      
+      // Station info panel buttons (operate on the last-clicked station)
+      const infoAddBtn = document.getElementById("info-add");
+      const infoRemoveBtn = document.getElementById("info-remove");
+      if (infoAddBtn && infoRemoveBtn) {
+        infoAddBtn.addEventListener("click", () => {
+          if (currentStationInfo) addStation(currentStationInfo);
+        });
+        infoRemoveBtn.addEventListener("click", () => {
+          if (currentStationInfo) removeStation(currentStationInfo.id);
+        });
+      }
+
+document.addEventListener("keydown", (e) => {
         if (e.key === "Escape" && fullscreenMode) {
           exitFullscreen();
         }
       });
 
-      window.addEventListener("resize", () => {
-        if (map) map.invalidateSize();
-        if (document.getElementById("chart")) {
-          Plotly.Plots.resize("chart");
-        }
-      });
+window.addEventListener("resize", () => {
+  if (map) map.invalidateSize();
+
+  const chartEl = document.getElementById("chart");
+  if (chartEl && chartEl.data) {
+    Plotly.relayout("chart", {
+      margin: marginsForScreen(),
+      legend: legendLayoutForScreen(),
+    });
+    Plotly.Plots.resize("chart");
+  }
+});
+
     }
 
     // ================== FULLSCREEN HELPERS ==================
@@ -843,117 +1021,324 @@ function exitFullscreen() {
       statusSpan.textContent = msg || "";
     }
 
-    async function findStationsNearMapCenter() {
-      const apiKey = getApiKeyOrWarn();
-      const center = map.getCenter();
-      const url =
-        API_BASE +
-        "/v3/location/near?geocode=" +
-        encodeURIComponent(center.lat + "," + center.lng) +
-        "&product=pws&format=json&apiKey=" +
-        encodeURIComponent(apiKey);
 
-      setStatus("Searching for PWS near map center…");
-      const res = await fetch(url);
-      if (!res.ok) {
-        setStatus("API error when searching for stations.");
-        throw new Error("HTTP " + res.status);
-      }
-      const data = await res.json();
+/* NOTE:
+   The Weather Underground site itself calls a `pwsidentity` endpoint that includes a `goldStar` flag,
+   but most user-generated API keys get "Access Denied" for that endpoint.
+   This app therefore uses a QC heuristic on marker click instead of pwsidentity.
+*/
 
-      if (!data.location || !data.location.stationId) {
-        setStatus("No PWS found near this location.");
-        return;
-      }
 
-      const ids = data.location.stationId;
-      const names = data.location.stationName || [];
-      const lats = data.location.latitude || [];
-      const lons = data.location.longitude || [];
+async function findStationsNearMapCenter() {
+  const apiKey = getApiKeyOrWarn();
+  const center = map.getCenter();
+  const url =
+    API_BASE +
+    "/v3/location/near?geocode=" +
+    encodeURIComponent(center.lat + "," + center.lng) +
+    "&product=pws&format=json&apiKey=" +
+    encodeURIComponent(apiKey);
 
-      ids.forEach((id, idx) => {
-        const lat = lats[idx];
-        const lon = lons[idx];
-        const name = names[idx] || id;
+  setStatus("Searching for PWS near map center…");
+  const res = await fetch(url);
+  if (!res.ok) {
+    setStatus("API error when searching for stations.");
+    throw new Error("HTTP " + res.status);
+  }
+  const data = await res.json();
 
-        if (!stationMarkers.has(id)) {
-          const marker = L.marker([lat, lon]).addTo(map);
-          marker.bindPopup(
-            `<strong>${name}</strong><br/>${id}<br/><small>Click marker to add/remove from chart</small>`
-          );
-          marker.on("click", () => {
-            toggleStationSelection({
-              id,
-              name,
-              lat,
-              lon,
-            });
-          });
-          stationMarkers.set(id, marker);
-        }
+  if (!data.location || !data.location.stationId) {
+    setStatus("No PWS found near this location.");
+    return;
+  }
+
+  const ids = data.location.stationId;
+  const names = data.location.stationName || [];
+  const lats = data.location.latitude || [];
+  const lons = data.location.longitude || [];
+
+  ids.forEach((id, idx) => {
+    const lat = lats[idx];
+    const lon = lons[idx];
+    const name = names[idx] || id;
+
+    if (!stationMarkers.has(id)) {
+      const marker = L.marker([lat, lon], { icon: makeTempDivIcon("") }).addTo(map);
+
+      // Start with an "unknown" star; we'll compute QC on click.
+      marker.bindTooltip("?", {
+        permanent: true,
+        direction: "right",
+        offset: [14, 0],
+        className: "star-tooltip",
+        opacity: 0.95,
       });
 
-      setStatus(`Found ${ids.length} PWS near map center.`);
+      marker.on("click", () => {
+        showStationInfo(
+          { id, name, lat, lon },
+          marker
+        );
+      });
+
+      stationMarkers.set(id, marker);
+
+      // Kick off QC + latest temp in the background
+      updateMarkerQcAndTemp(id, marker).catch(() => {});
+    }
+  });
+
+  setStatus(`Found ${ids.length} PWS near map center. Click a marker to inspect/add.`);
+}
+
+/**
+ * QC "gold star" heuristic.
+ * Weather Underground's own goldStar/identity endpoint appears to be blocked for most user API keys.
+ * So we infer a "star" from recent data quality: % of points with qcStatus==1 over last 24h.
+ */
+const qcCache = new Map(); // stationId -> { starChar, qcPass, good, total, note, checkedAt }
+let currentStationInfo = null;
+let currentStationMarker = null;
+
+async function fetchQcHeuristic(stationId, unitsCode) {
+  const cached = qcCache.get(stationId);
+  if (cached && Date.now() - cached.checkedAt < 15 * 60 * 1000) return cached; // 15 min cache
+
+  const apiKey = getApiKeyOrWarn();
+  const url =
+    API_BASE +
+    "/v2/pws/observations/all/1day?stationId=" +
+    encodeURIComponent(stationId) +
+    "&format=json&numericPrecision=decimal&units=" +
+    encodeURIComponent(unitsCode) +
+    "&apiKey=" +
+    encodeURIComponent(apiKey);
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      const r = {
+        starChar: "☆",
+        qcPass: false,
+        tempText: "",
+        good: 0,
+        total: 0,
+        note: `QC unknown (HTTP ${res.status})`,
+        checkedAt: Date.now(),
+      };
+      qcCache.set(stationId, r);
+      return r;
     }
 
-    function toggleStationSelection(info) {
-      const { id } = info;
-
-      if (selectedStations.has(id)) {
-        selectedStations.delete(id);
-      } else {
-        selectedStations.set(id, info);
+    const data = await res.json();
+    const obs = data.observations || [];
+    let good = 0;
+    for (const o of obs) {
+      if (o && o.qcStatus === 1) good++;
+    }
+    const total = obs.length;
+    // Extract latest temperature for marker display
+    let latest = null;
+    for (const o of obs) {
+      if (!o) continue;
+      if (!latest || (o.epoch ?? 0) > (latest.epoch ?? 0)) latest = o;
+    }
+    let tempText = "";
+    if (latest) {
+      const t =
+        unitsCode === "m"
+          ? (latest.metric && latest.metric.tempAvg)
+          : (latest.imperial && latest.imperial.tempAvg);
+      if (typeof t === "number" && isFinite(t)) {
+        tempText = `${Math.round(t)}°`;
       }
-      updateStationListUI();
     }
 
-    function updateStationListUI() {
-      const entries = Array.from(selectedStations.values());
-      selectedCountSpan.textContent = `${entries.length} selected`;
 
-      if (entries.length === 0) {
-        stationListDiv.innerHTML =
-          '<div style="font-size:0.8rem;color:var(--muted);">No stations selected yet.</div>';
-        return;
-      }
+    // "Pass" threshold: 98% of points marked QC=1 (tunable)
+    const qcPass = total > 0 && good / total >= 0.98;
+    const starChar = qcPass ? "⭐" : "☆";
+    const note =
+      total === 0
+        ? "No recent data returned."
+        : `QC=1 on ${good}/${total} points (last 24h).`;
 
-      stationListDiv.innerHTML = "";
-      entries.forEach((st) => {
-        const item = document.createElement("div");
-        item.className = "station-item selected";
+    const r = { starChar, qcPass, good, total, note, tempText, checkedAt: Date.now() };
+    qcCache.set(stationId, r);
+    return r;
+  } catch (e) {
+    const r = {
+      starChar: "☆",
+        qcPass: false,
+        tempText: "",
+      good: 0,
+      total: 0,
+      note: `QC unknown (fetch error)`,
+      checkedAt: Date.now(),
+    };
+    qcCache.set(stationId, r);
+    return r;
+  }
+}
 
-        const meta = document.createElement("div");
-        meta.className = "station-meta";
 
-        const nameEl = document.createElement("div");
-        nameEl.className = "station-name";
-        nameEl.textContent = st.name || st.id;
+function makeTempDivIcon(tempText) {
+  const safe = (tempText ?? "").toString();
+  const empty = safe.trim() === "";
+  return L.divIcon({
+    className: "temp-marker",
+    html: `<div class="temp-circle ${empty ? "empty" : ""}">${empty ? "" : safe}</div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -14],
+  });
+}
 
-        const idEl = document.createElement("div");
-        idEl.className = "station-id";
-        idEl.textContent = `${st.id} · ${st.lat.toFixed(
-          3
-        )}, ${st.lon.toFixed(3)}`;
+async function updateMarkerQcAndTemp(stationId, marker) {
+  const unitsCode = unitsSelect.value || "e";
+  const qc = await fetchQcHeuristic(stationId, unitsCode);
 
-        meta.appendChild(nameEl);
-        meta.appendChild(idEl);
+  // Update the badge (question mark -> star/gray)
+  setMarkerStar(marker, qc.starChar);
 
-        const btn = document.createElement("button");
-        btn.textContent = "Remove";
-        btn.className = "remove";
-        btn.addEventListener("click", () => {
-          selectedStations.delete(st.id);
-          updateStationListUI();
-        });
+  // Update the circle contents with latest temp (if available)
+  if (qc.tempText) {
+    marker.setIcon(makeTempDivIcon(qc.tempText));
+  } else {
+    marker.setIcon(makeTempDivIcon(""));
+  }
 
-        item.appendChild(meta);
-        item.appendChild(btn);
+  // If this station is currently in the info panel, refresh it (so temp/star updates)
+  if (currentInfoStation && currentInfoStation.id === stationId) {
+    showStationInfo(currentInfoStation, marker);
+  }
 
-        stationListDiv.appendChild(item);
+  // If selected, update list UI to show star if you display it there
+  updateStationListUI();
+}
+
+function setMarkerStar(marker, starChar) {
+  try {
+    const tt = marker.getTooltip();
+    if (tt) {
+      tt.setContent(starChar);
+    } else {
+      marker.bindTooltip(starChar, {
+        permanent: true,
+        direction: "top",
+        offset: [0, -10],
+        className: "star-tooltip",
+        opacity: 0.95,
       });
     }
+  } catch (e) {
+    // ignore
+  }
+}
 
-    // ================== DATA FETCHING ==================
+function setInfoPanelSelectedState(stationId) {
+  const addBtn = document.getElementById("info-add");
+  const removeBtn = document.getElementById("info-remove");
+  const isSelected = selectedStations.has(stationId);
+  addBtn.disabled = isSelected;
+  removeBtn.disabled = !isSelected;
+}
+
+function showStationInfo(info, marker) {
+  currentStationInfo = info;
+  currentStationMarker = marker;
+
+  const panel = document.getElementById("station-info");
+  panel.classList.remove("hidden");
+
+  document.getElementById("info-name").textContent = info.name || info.id;
+  document.getElementById("info-id").textContent = info.id;
+
+  document.getElementById("info-meta").innerHTML =
+    `<div>📍 ${info.lat.toFixed(5)}, ${info.lon.toFixed(5)}</div>`;
+
+  // Dashboard link
+  const link = document.getElementById("info-link");
+  link.href = `https://www.wunderground.com/dashboard/pws/${encodeURIComponent(
+    info.id
+  )}`;
+
+  setInfoPanelSelectedState(info.id);
+
+  // Kick off QC check (async) and update panel + marker when it arrives
+  const unitsCode = unitsSelect.value || "e";
+  document.getElementById("info-star").textContent = "?";
+  document.getElementById("info-note").textContent = "Checking QC…";
+
+  fetchQcHeuristic(info.id, unitsCode).then((qc) => {
+    // Update marker and panel
+    document.getElementById("info-star").textContent = qc.starChar;
+    document.getElementById("info-note").textContent = qc.note;
+    setMarkerStar(marker, qc.starChar);
+
+    // Also update list if this station is already selected
+    if (selectedStations.has(info.id)) updateStationListUI();
+  });
+}
+
+function addStation(info) {
+  selectedStations.set(info.id, info);
+  updateStationListUI();
+  setInfoPanelSelectedState(info.id);
+}
+
+function removeStation(id) {
+  selectedStations.delete(id);
+  updateStationListUI();
+  setInfoPanelSelectedState(id);
+}
+
+function updateStationListUI() {
+  const entries = Array.from(selectedStations.values());
+  selectedCountSpan.textContent = `${entries.length} selected`;
+
+  if (entries.length === 0) {
+    stationListDiv.innerHTML =
+      '<div style="font-size:0.8rem;color:var(--muted);">No stations selected yet.</div>';
+    return;
+  }
+
+  stationListDiv.innerHTML = "";
+  entries.forEach((st) => {
+    const item = document.createElement("div");
+    item.className = "station-item selected";
+
+    const meta = document.createElement("div");
+    meta.className = "station-meta";
+
+    const nameEl = document.createElement("div");
+    nameEl.className = "station-name";
+
+    const qc = qcCache.get(st.id);
+    const star = qc ? qc.starChar : "?";
+    nameEl.textContent = `${star} ${st.name || st.id} (${st.id})`;
+
+    const idEl = document.createElement("div");
+    idEl.className = "station-id";
+    idEl.textContent = `${st.lat.toFixed(3)}, ${st.lon.toFixed(3)}`;
+
+    meta.appendChild(nameEl);
+    meta.appendChild(idEl);
+
+    const btn = document.createElement("button");
+    btn.textContent = "Remove";
+    btn.className = "remove";
+    btn.addEventListener("click", () => {
+      removeStation(st.id);
+    });
+
+    item.appendChild(meta);
+    item.appendChild(btn);
+
+    stationListDiv.appendChild(item);
+  });
+}
+
 
     function computeRange() {
       const key = rangeSelect.value;
@@ -1203,7 +1588,7 @@ async function fetchStationSeries(stationId, rangeInfo, unitsCode) {
         },
         paper_bgcolor: "rgba(15,23,42,0)",
         plot_bgcolor: "rgba(15,23,42,0.9)",
-        margin: { l: 50, r: 20, t: 40, b: 40 },
+        margin: marginsForScreen(),
         xaxis: {
           title: { text: "Time", font: { color: "#9ca3af" } },
           showgrid: true,
@@ -1216,10 +1601,7 @@ async function fetchStationSeries(stationId, rangeInfo, unitsCode) {
           gridcolor: "rgba(148,163,184,0.2)",
           tickfont: { color: "#9ca3af" },
         },
-        legend: {
-          bgcolor: "rgba(15,23,42,0.8)",
-          bordercolor: "rgba(148,163,184,0.4)",
-        },
+        legend: legendLayoutForScreen()
       };
 
       Plotly.newPlot("chart", traces, layout, { responsive: true });
